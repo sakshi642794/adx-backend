@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advenxure — WS Tester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: monospace;
+    background: #f5f5f5;
+    color: #222;
+    padding: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  p.sub { font-size: 12px; color: #777; margin-bottom: 20px; }
+
+  /* ── CONNECTION BAR ── */
+  .connect-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .connect-bar input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+    font-family: monospace;
+    min-width: 200px;
+  }
+  .connect-bar input:focus { outline: none; border-color: #555; }
+
+  button {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-family: monospace;
+    cursor: pointer;
+    border: 1px solid #555;
+    background: white;
+    transition: background 0.15s;
+  }
+  button:hover { background: #eee; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.danger  { border-color: #c00; color: #c00; }
+  button.danger:hover { background: #fee; }
+  button.primary { border-color: #060; color: #060; background: #f0fff0; }
+  button.primary:hover { background: #d4f5d4; }
+
+  /* ── STATUS ── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #ddd;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #ccc;
+    flex-shrink: 0;
+  }
+  .dot.connected    { background: #2a2; }
+  .dot.connecting   { background: #fa0; animation: blink .5s infinite; }
+  .dot.disconnected { background: #c33; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── MAIN GRID ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: white;
+    border: 1px solid #ddd;
+    padding: 14px;
+  }
+  .card h2 {
+    font-size: 13px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    color: #444;
+  }
+
+  /* ── SEND PANEL ── */
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
+  .field input, .field textarea, .field select {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #ccc;
+    font-family: monospace;
+    font-size: 12px;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus {
+    outline: none;
+    border-color: #555;
+  }
+  .field textarea { resize: vertical; min-height: 80px; }
+
+  /* ── LOG ── */
+  .log {
+    height: 320px;
+    overflow-y: auto;
+    background: #111;
+    color: #ddd;
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 10px;
+    font-family: monospace;
+  }
+  .log-entry { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #222; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: #555; }
+  .log-in    { color: #4f4; }
+  .log-out   { color: #4af; }
+  .log-sys   { color: #fa4; }
+  .log-err   { color: #f44; }
+  .log-data  { color: #999; word-break: break-all; }
+
+  .log-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+
+  /* ── QUICK BUTTONS ── */
+  .quick-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .quick-grid button { font-size: 11px; padding: 7px 4px; }
+
+  /* ── ENV STATE ── */
+  .env-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .env-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+  .env-table td:first-child { color: #666; width: 40%; }
+  .env-table td:last-child { font-weight: bold; }
+
+  hr { border: none; border-top: 1px solid #eee; margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<h1>Advenxure — WebSocket Tester</h1>
+<p class="sub">Simple client for testing real-time sync across PCs</p>
+
+<!-- CONNECTION -->
+<div class="connect-bar">
+  <input id="url" type="text" value="ws://localhost:8000/ws/arena" placeholder="ws://host:8000/ws/room"/>
+  <input id="name" type="text" value="PC-1" placeholder="Your name" style="max-width:100px"/>
+  <button id="connectBtn" onclick="toggleConnect()">Connect</button>
+</div>
+
+<!-- STATUS -->
+<div class="status-bar">
+  <div class="dot disconnected" id="dot"></div>
+  <span id="statusText">Disconnected</span>
+  <span style="margin-left:auto;color:#888" id="peers">0 peers in room</span>
+</div>
+
+<!-- GRID -->
+<div class="grid">
+
+  <!-- SEND -->
+  <div class="card">
+    <h2>Send Message</h2>
+    <div class="field">
+      <label>Event</label>
+      <input id="evtInput" type="text" value="arena.update"/>
+    </div>
+    <div class="field">
+      <label>Payload (JSON)</label>
+      <textarea id="payloadInput">{"message": "hello from PC-1", "score": 42}</textarea>
+    </div>
+    <button class="primary" onclick="sendMsg()" id="sendBtn" disabled style="width:100%">Send →</button>
+
+    <hr>
+
+    <h2 style="margin-bottom:10px">Quick Actions</h2>
+    <div class="quick-grid">
+      <button onclick="quick('alert.on',  {status:'ON'})" id="q1" disabled>🔴 Alert ON</button>
+      <button onclick="quick('alert.off', {status:'OFF'})" id="q2" disabled>✅ Alert OFF</button>
+      <button onclick="quick('phase.next',{phase:'+1'})" id="q3" disabled>⏭ Next Phase</button>
+      <button onclick="quick('score.add', {points:10})" id="q4" disabled>➕ +10 Score</button>
+      <button onclick="quick('mode.elite',{mode:'ELITE'})" id="q5" disabled>⚡ Elite Mode</button>
+      <button onclick="quick('sync.request',{from:myName()})" id="q6" disabled>🔄 Sync All</button>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="card">
+    <h2>Event Log</h2>
+    <div class="log" id="log"></div>
+    <div class="log-controls">
+      <button onclick="clearLog()" style="font-size:11px;padding:4px 10px">Clear</button>
+    </div>
+  </div>
+
+  <!-- ENV STATE -->
+  <div class="card">
+    <h2>Shared State (received from room)</h2>
+    <table class="env-table" id="envTable">
+      <tr><td>phase</td><td id="s-phase">—</td></tr>
+      <tr><td>alert</td><td id="s-alert">—</td></tr>
+      <tr><td>score</td><td id="s-score">—</td></tr>
+      <tr><td>mode</td><td id="s-mode">—</td></tr>
+      <tr><td>last event</td><td id="s-event">—</td></tr>
+      <tr><td>last from</td><td id="s-from">—</td></tr>
+    </table>
+  </div>
+
+  <!-- RAW JSON -->
+  <div class="card">
+    <h2>Raw JSON Send</h2>
+    <div class="field">
+      <label>Full JSON message (Ctrl+Enter to send)</label>
+      <textarea id="rawInput" style="min-height:120px">{
+  "event": "custom.event",
+  "payload": {"key": "value"},
+  "room_id": "arena"
+}</textarea>
+    </div>
+    <button onclick="sendRaw()" id="rawBtn" disabled style="width:100%">Send Raw →</button>
+  </div>
+
+</div>
+
+<script>
+let ws = null
+let connected = false
+
+function myName() { return document.getElementById('name').value || 'PC-1' }
+function getRoom() {
+  const url = document.getElementById('url').value
+  return (url.split('/ws/')[1] || 'global')
+}
+
+// ── CONNECT ──────────────────────────────────────────────────────
+function toggleConnect() {
+  if (connected) { ws.close(); return }
+
+  const url = document.getElementById('url').value.trim()
+  if (!url) return
+
+  setStatus('connecting', 'Connecting...')
+  ws = new WebSocket(url)
+
+  ws.onopen = () => {
+    connected = true
+    setStatus('connected', 'Connected to ' + url)
+    setButtons(true)
+    addLog('sys', 'connected', { url, name: myName() })
+    // announce ourselves
+    wsSend({ event: 'peer.join', payload: { name: myName() }, room_id: getRoom() })
+  }
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data)
+      handleMsg(msg)
+    } catch(err) {
+      addLog('err', 'parse error', { raw: e.data })
+    }
+  }
+
+  ws.onclose = () => {
+    connected = false
+    setStatus('disconnected', 'Disconnected')
+    setButtons(false)
+    addLog('sys', 'disconnected', {})
+  }
+
+  ws.onerror = () => addLog('err', 'websocket error', {})
+}
+
+// ── HANDLE INCOMING ───────────────────────────────────────────────
+function handleMsg(msg) {
+  const { event, payload } = msg
+
+  // update peer count
+  if (payload?.total_connections !== undefined) {
+    document.getElementById('peers').textContent =
+      payload.total_connections + ' peer(s) in room'
+  }
+
+  // update shared state display
+  document.getElementById('s-event').textContent = event
+  if (payload?.from)     document.getElementById('s-from').textContent  = payload.from
+  if (payload?.phase)    document.getElementById('s-phase').textContent = payload.phase
+  if (payload?.alert)    document.getElementById('s-alert').textContent = payload.alert
+  if (payload?.score !== undefined) document.getElementById('s-score').textContent = payload.score
+  if (payload?.mode)     document.getElementById('s-mode').textContent  = payload.mode
+
+  addLog('in', event, payload)
+}
+
+// ── SEND ─────────────────────────────────────────────────────────
+function sendMsg() {
+  const event = document.getElementById('evtInput').value.trim()
+  let payload = {}
+  try { payload = JSON.parse(document.getElementById('payloadInput').value) }
+  catch(e) { return alert('Payload is not valid JSON') }
+
+  const obj = { event, payload: { ...payload, from: myName() }, room_id: getRoom() }
+  if (wsSend(obj)) addLog('out', event, obj.payload)
+}
+
+function quick(event, payload) {
+  const obj = { event, payload: { ...payload, from: myName() }, room_id: getRoom() }
+  if (wsSend(obj)) addLog('out', event, obj.payload)
+}
+
+function sendRaw() {
+  const raw = document.getElementById('rawInput').value.trim()
+  try {
+    const obj = JSON.parse(raw)
+    if (wsSend(obj)) addLog('out', obj.event || 'raw', obj.payload || {})
+  } catch(e) { alert('Invalid JSON') }
+}
+
+function wsSend(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj))
+    return true
+  }
+  return false
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────────
+function setStatus(state, text) {
+  document.getElementById('dot').className = 'dot ' + state
+  document.getElementById('statusText').textContent = text
+  const btn = document.getElementById('connectBtn')
+  btn.textContent = state === 'connected' ? 'Disconnect' : 'Connect'
+  btn.className   = state === 'connected' ? 'danger' : ''
+}
+
+function setButtons(on) {
+  ['sendBtn','rawBtn','q1','q2','q3','q4','q5','q6'].forEach(id => {
+    document.getElementById(id).disabled = !on
+  })
+}
+
+function addLog(type, event, payload) {
+  const log = document.getElementById('log')
+  const now = new Date().toTimeString().slice(0,8)
+  const icon = type === 'in' ? '↓' : type === 'out' ? '↑' : type === 'err' ? '✕' : '·'
+  const div = document.createElement('div')
+  div.className = 'log-entry'
+  div.innerHTML =
+    `<span class="log-time">${now}</span> ` +
+    `<span class="log-${type}">${icon} ${event}</span><br>` +
+    `<span class="log-data">${JSON.stringify(payload)}</span>`
+  log.appendChild(div)
+  while (log.children.length > 150) log.removeChild(log.firstChild)
+  log.scrollTop = log.scrollHeight
+}
+
+function clearLog() { document.getElementById('log').innerHTML = '' }
+
+// Ctrl+Enter in raw box
+document.getElementById('rawInput').addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'Enter') sendRaw()
+})
+</script>
+</body>
+</html>
