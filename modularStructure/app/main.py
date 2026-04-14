@@ -55,16 +55,20 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
             asyncio.run_coroutine_threadsafe(
                 websocket_manager.broadcast_all(msg, room_id), loop
             )
+            logger.info("[READY] sent event=%s room=%s payload=%s", event, room_id, msg["payload"])
 
         _send("attackers_ready" if attackers_ready else "attackers_not_ready")
         _send("defenders_ready" if defenders_ready else "defenders_not_ready")
 
         if attackers_ready and defenders_ready:
+            _send("both_teams_ready")
             _send(
                 "teams_ready",
                 {"attackersReady": True, "defendersReady": True},
             )
         else:
+            if (not attackers_ready) and (not defenders_ready):
+                _send("no_team_ready")
             _send(
                 "teams_ready",
                 {"attackersReady": attackers_ready, "defendersReady": defenders_ready},
@@ -75,7 +79,7 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
 async def lifespan(app: FastAPI):
     logger.info("🚀 %s starting up | env=%s", settings.APP_NAME, settings.ENVIRONMENT)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     t = threading.Thread(target=_terminal_ready_loop, args=(loop,), daemon=True)
     t.start()
 
