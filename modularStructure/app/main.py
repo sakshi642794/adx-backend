@@ -12,6 +12,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.schemas.ready import HealthResponse, WSMessage
 from app.websocket.manager import websocket_manager
+from app.utils.pi_bridge import is_ready_input_enabled, set_ready_input_enabled
 
 load_dotenv()
 
@@ -32,6 +33,16 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
     print("Press Ctrl+C to stop.\n")
 
     while True:
+        if not is_ready_input_enabled():
+            # Wait until the round ends before asking again
+            try:
+                asyncio.run_coroutine_threadsafe(asyncio.sleep(0.5), loop).result()
+            except Exception:
+                # If loop is not ready yet, just sleep locally
+                import time
+                time.sleep(0.5)
+            continue
+
         try:
             raw = input("Teams ready? (attackers defenders): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -66,6 +77,7 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
                 "teams_ready",
                 {"attackersReady": True, "defendersReady": True},
             )
+            set_ready_input_enabled(False)
         else:
             if (not attackers_ready) and (not defenders_ready):
                 _send("no_team_ready")
