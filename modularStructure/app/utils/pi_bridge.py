@@ -1,6 +1,7 @@
 import logging
 import threading
 from app.websocket.manager import websocket_manager
+from app.utils.timer_speed import timer_speed_manager
 
 logger = logging.getLogger(__name__)
 
@@ -36,3 +37,17 @@ async def handle_pi_event(data: dict, room_id: str = "arena") -> None:
         set_ready_input_enabled(False)
     if event in ("round_end", "attackers_win", "defenders_win", "defuse_success"):
         set_ready_input_enabled(True)
+        snapshot = await timer_speed_manager.reset_room(room_id)
+        if snapshot.get("hadActiveEffects"):
+            await websocket_manager.broadcast_all(
+                {
+                    "event": "timer_speed_update",
+                    "payload": {
+                        **snapshot,
+                        "announcement": "TIME SHIFT RESET - ROUND AND SPIKE TIMERS BACK TO NORMAL",
+                        "reason": "reset",
+                    },
+                    "room_id": room_id,
+                },
+                room_id,
+            )
