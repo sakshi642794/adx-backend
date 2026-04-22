@@ -62,6 +62,11 @@ async def _broadcast_timer_speed_update(room_id: str, snapshot: dict, reason: st
         },
         room_id,
     )
+    logger.info(
+        "[CTRL] timer_speed_update delivered | room=%s | connections=%d",
+        room_id,
+        websocket_manager.get_connection_count(room_id),
+    )
 
 
 async def _schedule_timer_speed_expiry(room_id: str, effect_id: str, expires_at_ms: int) -> None:
@@ -82,7 +87,7 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
     print("Ready input (only when enabled):")
     print("  - y n            (attackers defenders)")
     print("  - ready y n")
-    print("CO commands (anytime):")
+    print("Admin commands (anytime):")
     print("  - fast           (activate 2x time for round/spike for 60s)")
     print("  - slow           (activate 0.5x time for round/spike for 60s)")
     print("  - kill A1        (broadcast A1-killed)")
@@ -104,6 +109,11 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
         message = {"event": event, "payload": payload or {}, "room_id": room_id}
         await websocket_manager.broadcast_all(message, room_id)
         logger.info("[CTRL] broadcasted event=%s room=%s payload=%s", event, room_id, message["payload"])
+        logger.info(
+            "[CTRL] delivered | room=%s | connections=%d",
+            room_id,
+            websocket_manager.get_connection_count(room_id),
+        )
 
     while True:
         try:
@@ -185,6 +195,7 @@ def _terminal_ready_loop(loop: asyncio.AbstractEventLoop) -> None:
                     "teams_ready",
                     {"attackersReady": True, "defendersReady": True},
                 )
+                _send("start_game")
                 set_ready_input_enabled(False)
             else:
                 if (not attackers_ready) and (not defenders_ready):
@@ -337,8 +348,48 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 "MSG received | room=%s | event=%s", room_id, msg.event
             )
 
-            if msg.event in {"activate_fast_mode", "activate_slow_mode"}:
-                mode = "fast" if msg.event == "activate_fast_mode" else "slow"
+            # ------------------------------------------------------------
+            # CO/Admin convenience aliases (for simple clients)
+            # ------------------------------------------------------------
+            raw_event = (msg.event or "").strip()
+            lower_event = raw_event.lower()
+
+            # Allow either:
+            #   {event:"kill", payload:{playerId:"A1"}}  OR  {event:"kill A1"}
+            #   {event:"revive", payload:{playerId:"A1"}} OR {event:"revive A1"}
+            if lower_event.startswith("kill") or lower_event.startswith("revive"):
+                verb = "kill" if lower_event.startswith("kill") else "revive"
+                player = None
+
+                if isinstance(msg.payload, dict):
+                    player = (
+                        msg.payload.get("playerId")
+                        or msg.payload.get("player")
+                        or msg.payload.get("id")
+                    )
+                if isinstance(player, str):
+                    player = player.strip()
+
+                if not player and " " in raw_event:
+                    parts = raw_event.split()
+                    if len(parts) >= 2:
+                        player = parts[1].strip()
+
+                if isinstance(player, str):
+                    pid = player.upper()
+                    if (
+                        len(pid) == 2
+                        and pid[0] in ("A", "D")
+                        and pid[1] in ("1", "2", "3", "4", "5")
+                    ):
+                        derived_event = f"{pid}-killed" if verb == "kill" else f"revive-{pid}"
+                        derived = WSMessage(event=derived_event, payload={}, room_id=room_id)
+                        await websocket_manager.broadcast_all(derived.model_dump(mode="json"), room_id)
+                        continue
+
+            # Support canonical events and simple "fast"/"slow" aliases.
+            if msg.event in {"activate_fast_mode", "activate_slow_mode", "fast", "slow"}:
+                mode = "fast" if msg.event in {"activate_fast_mode", "fast"} else "slow"
                 await websocket_manager.broadcast_all(msg.model_dump(mode="json"), room_id)
                 snapshot = await timer_speed_manager.activate(room_id, mode)
                 await _broadcast_timer_speed_update(room_id, snapshot, "activated")
